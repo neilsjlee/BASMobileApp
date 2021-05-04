@@ -1,10 +1,16 @@
 package edu.umich.neilslee.basmobileapp;
 
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.nfc.NdefMessage;
+import android.nfc.NdefRecord;
+import android.nfc.NfcAdapter;
+import android.nfc.NfcEvent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MenuItem;
@@ -36,15 +42,20 @@ import androidx.navigation.Navigation;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements NfcAdapter.CreateNdefMessageCallback {
 
     ArrayAdapter<String> adapter;
     ArrayList<String> listItem;
     ListView listView1;
-    CommonData commonData;
+    public CommonData commonData;
     public static Context context_main;
     public ProgressDialog progressDialog;
     String mailbox_address_on_hold = "";
+    long start_time;
+    long end_time;
+
+    NfcAdapter nfcAdapter;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,7 +93,8 @@ public class MainActivity extends AppCompatActivity {
                 popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
                     @Override
                     public boolean onMenuItemClick(MenuItem menuItem) {
-                        if ((listItem.get(position)).split("/")[0] == "ALL DEVICES") {
+                        start_time = System.currentTimeMillis();
+                        if ((listItem.get(position)).split("/")[0].equals("ALL DEVICES")) {
                             if (menuItem.getItemId() == R.id.action_menu1){
                                 progressDialog.show();
                                 try {
@@ -167,6 +179,8 @@ public class MainActivity extends AppCompatActivity {
                                 }
                             }
                         }
+                        end_time = System.currentTimeMillis();
+                        Log.d("TIME MEASUREMENT", "Button Pressed -> Started sending HTTP Post Message: "+(end_time-start_time));
 
                         return false;
                     }
@@ -209,22 +223,93 @@ public class MainActivity extends AppCompatActivity {
             Log.d("Main IntentReceiver", "Got message... something");
             String message = intent.getStringExtra("message");
             Log.d("Main IntentReceiver", "Got message: " + message);
-            try {
-                commonData.setSystemStatus(message.split("\\*")[1]);
-            } catch (JSONException e) {
-                e.printStackTrace();
+            if(message.contains("*")){
+                try {
+                    commonData.setSystemStatus(message.split("\\*")[1]);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                try {
+                    update_sysem_status_view();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                progressDialog.dismiss();
             }
-            try {
-                update_sysem_status_view();
-            } catch (JSONException e) {
-                e.printStackTrace();
+            else {
+                try {
+                    Log.d("Main IntentReceiver", "Trying to parse the json message");
+                    JSONObject jsonObject = new JSONObject(message);
+                    if (jsonObject.getString("message_type").equals("door_locked")){
+                        Log.d("Main IntentReceiver", "DOOR LOCKED mqtt message received");
+                        AlertDialog.Builder builder = new AlertDialog.Builder(context_main);
+                        builder.setTitle("Door Locked").setMessage("Do tou want to set the system all armed?");
+                        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                try {
+                                    mailbox_address_on_hold = new HttpPostData(getParent(), commonData).execute("arm_request_all","IGNORE_DEVICE_ID").get();
+                                } catch (ExecutionException e) {
+                                    e.printStackTrace();
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        });
+
+                        builder.setNegativeButton("CANCEL", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                Log.d("Main IntentReceiver", "All Arm Request Canceled by user.");
+                            }
+                        });
+
+                        AlertDialog alertDialog = builder.create();
+                        alertDialog.show();
+                    }
+                    else if (jsonObject.getString("message_type").equals("door_unlocked")){
+                        Log.d("Main IntentReceiver", "DOOR UNLOCKED mqtt message received");
+                        AlertDialog.Builder builder = new AlertDialog.Builder(context_main);
+                        builder.setTitle("Door Locked").setMessage("Do tou want to set the system all disarmed?");
+                        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                try {
+                                    mailbox_address_on_hold = new HttpPostData(getParent(), commonData).execute("disarm_request_all","IGNORE_DEVICE_ID").get();
+                                } catch (ExecutionException e) {
+                                    e.printStackTrace();
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        });
+
+                        builder.setNegativeButton("CANCEL", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                Log.d("Main IntentReceiver", "All Disarm Request Canceled by user.");
+                            }
+                        });
+
+                        AlertDialog alertDialog = builder.create();
+                        alertDialog.show();
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    Log.d("Main IntentReceiver", "Unknown Protocol - Not JSON");
+                }
             }
-            progressDialog.dismiss();
+
         }
     };
 
     public void openSetting(View v){
         Intent intent = new Intent(getApplicationContext(), Setting.class);
+        startActivity(intent);
+    }
+
+    public void openGetPhoto(View v){
+        Intent intent = new Intent(getApplicationContext(), GetPhoto.class);
         startActivity(intent);
     }
 
@@ -297,6 +382,54 @@ public class MainActivity extends AppCompatActivity {
         // Java 10
         // return result.toString(StandardCharsets.UTF_8);
 
+    }
+
+
+    @Override
+    public NdefMessage createNdefMessage(NfcEvent event) {
+
+        //get Wi-Fi SSID
+        String ssidStr = commonData.getHomeWiFiSSID();
+        String pwStr = commonData.getHomeWiFiPW();
+        String ipStr = commonData.getSystemPrivateIPAddress();
+
+
+
+        String text = (pwStr);
+        NdefMessage msg = new NdefMessage(
+                new NdefRecord[] { NdefRecord.createMime("application/edu.umich.neilslee.basmobileapp", text.getBytes())
+                        //"application/vnd.com.example.android.beam", text.getBytes())
+                        /**
+                         * The Android Application Record (AAR) is commented out. When a device
+                         * receives a push with an AAR in it, the application specified in the AAR
+                         * is guaranteed to run. The AAR overrides the tag dispatch system.
+                         * You can add it back in to guarantee that this
+                         * activity starts when receiving a beamed message. For now, this code
+                         * uses the tag dispatch system.
+                        */
+                        //,NdefRecord.createApplicationRecord("com.example.android.beam")
+                });
+        return msg;
+    }
+
+    public void doorLockNFC(View v) {
+        // Check for available NFC Adapter
+        nfcAdapter = NfcAdapter.getDefaultAdapter(this);
+        if (nfcAdapter == null) {
+            Toast.makeText(this, "NFC is not available", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        // Register callback
+        nfcAdapter.setNdefPushMessageCallback(this, this);
+        Toast.makeText(this, "NFC Started\nTap this phone to the Door Lock.", Toast.LENGTH_LONG).show();
+    }
+
+    public void buzzerOffRequest(View v) throws ExecutionException, InterruptedException {
+        // Send "buzzer_off" to the Control Hub
+        mailbox_address_on_hold = new HttpPostData(getParent(), commonData).execute("buzzer_off","IGNORE_DEVICE_ID").get();
+        Log.d("MainActivity","'buzzer_off' request sent");
+        Log.d("MainActivity","MAILBOX ADDRESS RECEIVED: "+mailbox_address_on_hold);
     }
 
 } // Activity

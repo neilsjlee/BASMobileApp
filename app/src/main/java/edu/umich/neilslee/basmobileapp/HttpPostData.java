@@ -32,6 +32,10 @@ public class HttpPostData extends AsyncTask<String, Void, String> {
     String target_did = "";
     Context context;
 
+    Long start_time;
+    Long end_time;
+
+
 
     public HttpPostData(Context _ctx, CommonData _cd){
         context = _ctx;
@@ -47,13 +51,14 @@ public class HttpPostData extends AsyncTask<String, Void, String> {
 
     @Override
     protected String doInBackground(String... params) {
+        start_time = System.currentTimeMillis();
+        Log.d("TIME MEASUREMENT", "HTTP POST MESSAGE TIME TAKEN 1");
 
         try {
             URL url = new URL("http://"+commonData.getSystemIPAddress()+":2002/"+params[0]);
             //URL url = new URL("https://ptsv2.com/t/ra4ej-1616855109/post");
             //URL url = new URL("https://webhook.site/df44f30b-c491-4336-8f11-8740631e0639"); // test purpose..
             // https://webhook.site/#!/df44f30b-c491-4336-8f11-8740631e0639/3c43193e-e291-4cb9-b85d-1924ca14b219/1
-
             HttpURLConnection httpCon = (HttpURLConnection)url.openConnection();
 
             httpCon.setRequestMethod("POST");
@@ -75,6 +80,8 @@ public class HttpPostData extends AsyncTask<String, Void, String> {
             dos.write(json.getBytes());
             dos.flush();
 
+            Log.d("TIME MEASUREMENT", "HTTP POST MESSAGE TIME TAKEN 1-1");
+
             int status = httpCon.getResponseCode();
             // this line is actually where the POST request gets sent.
             switch (status) {
@@ -91,10 +98,11 @@ public class HttpPostData extends AsyncTask<String, Void, String> {
                     return mbox_address;
             }
 
+            Log.d("TIME MEASUREMENT", "HTTP POST MESSAGE TIME TAKEN 1-2");
+
             dos.close();
             httpCon.disconnect();
-
-
+            Log.d("TIME MEASUREMENT", "HTTP POST MESSAGE TIME TAKEN 1-3");
 
         } catch (MalformedURLException e) {
             e.printStackTrace();
@@ -107,9 +115,15 @@ public class HttpPostData extends AsyncTask<String, Void, String> {
             e.printStackTrace();
             Log.d("HttpPostData", "JSONException");
         }
-
-
+        Log.d("TIME MEASUREMENT", "HTTP POST MESSAGE TIME TAKEN 2");
         return null;
+    }
+
+    @Override
+    protected void onPostExecute(String str) {
+        super.onPostExecute(str);
+        end_time = System.currentTimeMillis();
+        Log.d("TIME MEASUREMENT","HTTP POST MESSAGE TIME TAKEN: "+(end_time - start_time));
     }
 
     private BroadcastReceiver intentMessageReceiver = new BroadcastReceiver() {

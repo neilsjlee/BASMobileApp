@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.nio.file.Files;
 import java.util.ArrayList;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -30,6 +31,7 @@ public class CommonData extends Application {
     private JSONArray mostRecentSystemStatusJsonArray;
     private JSONObject mostRecentSystemStatusJsonObject;
     private boolean previous_save_exists = false;
+    private boolean public_ip_unavailable = false;
 
 
     private final String SETTING_FILE_NAME = "commondata_save_file.txt";
@@ -54,9 +56,9 @@ public class CommonData extends Application {
                 str = buffer.readLine();
             }
             JSONObject jsonObject = new JSONObject(data.toString());
-            setSystemIPAddress(jsonObject.getString("public_ip"), jsonObject.getString("private_ip"));
+            setSystemIPAddress2(jsonObject.getString("public_ip"), jsonObject.getString("private_ip"));
             setHomeWiFiInfo(jsonObject.getString("ssid"), jsonObject.getString("pw"));
-            Log.d("load_previous_setting", "Set Value: " + ControlHubIPAddress);
+            Log.d("load_previous_setting", "Set Value: " + ControlHubIPAddress + ", " + ControlHubPrivateIPAddress + ", " + HomeWiFiSSID + ", " + HomeWiFiPW);
 
             fis.close();
 
@@ -74,15 +76,30 @@ public class CommonData extends Application {
         return previous_save_exists;
     }
 
-    private void save_setting() throws FileNotFoundException {
-        FileOutputStream fos = openFileOutput(SETTING_FILE_NAME, Context.MODE_APPEND);
-        PrintWriter printWriter = new PrintWriter(fos);
-        printWriter.println("{\"public_ip\":\""+ControlHubIPAddress+"\", \"private_ip\":\""+ControlHubPrivateIPAddress+"\", \"ssid\": "+HomeWiFiSSID+", \"pw\":\""+HomeWiFiPW+"\"}");
+    private void save_setting() throws IOException {
+        //FileOutputStream fos = openFileOutput(SETTING_FILE_NAME, Context.MODE_APPEND);
+        File f = new File(getFilesDir().getPath()+"/"+SETTING_FILE_NAME);
+        if(f.delete()){
+            Log.d("save_setting", "Previous Setting File Deleted");
+        }
+        else{
+            Log.d("save_setting", "Previous Setting File Not Deleted");
+        }
+        f.createNewFile();
+        PrintWriter printWriter = new PrintWriter(f);
+        Log.d("save_setting", "{\"public_ip\":\""+ControlHubIPAddress+"\", \"private_ip\":\""+ControlHubPrivateIPAddress+"\", \"ssid\":\""+HomeWiFiSSID+"\", \"pw\":\""+HomeWiFiPW+"\"}");
+        Log.d("save_setting", "file path: "+f.getPath());
+        printWriter.println("{\"public_ip\":\""+ControlHubIPAddress+"\", \"private_ip\":\""+ControlHubPrivateIPAddress+"\", \"ssid\":\""+HomeWiFiSSID+"\", \"pw\":\""+HomeWiFiPW+"\"}");
         printWriter.close();
     }
 
     public String getSystemIPAddress(){
-        return ControlHubIPAddress;
+        if (!public_ip_unavailable){
+            return ControlHubIPAddress;
+        }
+        else {
+            return ControlHubPrivateIPAddress;
+        }
     }
 
     public String getSystemPrivateIPAddress(){
@@ -102,13 +119,28 @@ public class CommonData extends Application {
         ControlHubPrivateIPAddress = private_ip;
         try{
             save_setting();
+            Log.d("CommonData save_setting", "Setting Saved");
+            StringBuffer data = new StringBuffer();
+            FileInputStream fis = openFileInput(SETTING_FILE_NAME);
+            BufferedReader buffer = new BufferedReader(new InputStreamReader(fis));
+            String str = buffer.readLine();
+            Log.d("CommonData save_setting", "Read String: " + str);
         } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            Log.d("CommonData save_setting", "Failed to save setting");
+        } catch (IOException e) {
             e.printStackTrace();
         }
         Intent intent = new Intent("fromCommonData");
         intent.putExtra("message", ControlHubIPAddress + ", " + ControlHubPrivateIPAddress);
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
+
+    public void setSystemIPAddress2(String public_ip, String private_ip){
+        ControlHubIPAddress = public_ip;
+        ControlHubPrivateIPAddress = private_ip;
+    }
+
 
     public void setHomeWiFiInfo(String ssid, String pw){
         HomeWiFiSSID = ssid;
@@ -145,5 +177,10 @@ public class CommonData extends Application {
         }
 
     }
+
+    public void set_public_ip_unavailable(boolean b){
+        public_ip_unavailable = b;
+    }
+
 }
 

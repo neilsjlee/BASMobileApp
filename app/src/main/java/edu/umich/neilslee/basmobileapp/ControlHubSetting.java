@@ -37,6 +37,8 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -147,6 +149,7 @@ public class ControlHubSetting extends Activity implements CreateNdefMessageCall
 
     public void startNDEFPush(View v) {
         // Check for available NFC Adapter
+        long start_time = System.currentTimeMillis();
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
         if (nfcAdapter == null) {
             Toast.makeText(this, "NFC is not available", Toast.LENGTH_LONG).show();
@@ -157,6 +160,15 @@ public class ControlHubSetting extends Activity implements CreateNdefMessageCall
         nfcAdapter.setNdefPushMessageCallback(this, this);
         Toast.makeText(this, "NFC Started", Toast.LENGTH_LONG).show();
         ServerSocketOpen();
+        final ControlHubSetting activity = this;
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                // this code will be executed after 30 seconds
+                nfcAdapter.setNdefPushMessageCallback(null, activity);
+                Log.d("ControlHubSetting","NFC stopped.");
+            }
+        }, 30000);
     }
 
     public void ServerSocketOpen(){
@@ -215,8 +227,12 @@ public class ControlHubSetting extends Activity implements CreateNdefMessageCall
         WifiInfo info = wifiManager.getConnectionInfo();
         String ssid_all  = info.getSSID();
         String[] ssid =ssid_all.split("\"");
-        textView = (TextView) findViewById(R.id.acquired_ssid);
-        textView.setText(ssid[1]);
+        try{
+            textView = (TextView) findViewById(R.id.acquired_ssid);
+            textView.setText(ssid[1]);
+        } catch(Exception e) {
+            textView.setText("Wi-Fi Unavailable");
+        }
     }
 
     public void getSSIDButton(View v) throws InterruptedException {

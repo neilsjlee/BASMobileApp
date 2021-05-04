@@ -101,6 +101,7 @@ public class MQTTservice extends Service {
                 JSONObject json = new JSONObject(str);
                 //Log.d(getClass().getCanonicalName(),json.getString("id") + json.getString("content"));
                 Log.d(getClass().getCanonicalName(), "Received MQTT Message: "+json.toString());
+                sendMessage(str);
                 if (json.getString("message_type").equals("alert")){
                     push_notification("alert", json.getString("device_id"));
                 }

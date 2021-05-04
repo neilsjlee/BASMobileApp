@@ -7,8 +7,15 @@ import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcEvent;
 import android.os.Bundle;
+import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
+import android.widget.ToggleButton;
+
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ExecutionException;
 
 import androidx.core.app.ActivityCompat;
 
@@ -76,13 +83,30 @@ public class Setting extends Activity implements NfcAdapter.CreateNdefMessageCal
         // Register callback
         nfcAdapter.setNdefPushMessageCallback(this, this);
         Toast.makeText(this, "NFC Started\nTap this phone to a new device.", Toast.LENGTH_LONG).show();
+        final Setting activity = this;
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                // NFC will be stopped after 30 seconds.
+                nfcAdapter.setNdefPushMessageCallback(null, activity);
+                Log.d("Setting","NFC stopped.");
+            }
+        }, 30000);
     }
 
-    public void resetSystem(View v) {
+    public void resetSystem(View v) throws ExecutionException, InterruptedException {
+        String mailbox_address = new HttpPostData(getParent(), commonData).execute("all_deregister", "IGNORE_DEVICE_ID").get();
+        Log.d("MainActivity","MAILBOX ADDRESS RECEIVED: "+mailbox_address);
         Toast.makeText(this, "SYSTEM RESET", Toast.LENGTH_LONG).show();
         commonData.removePreviousSetting();
-        moveTaskToBack(true); // 태스크를 백그라운드로 이동
-        finishAndRemoveTask(); // 액티비티 종료 + 태스크 리스트에서 지우기
-        android.os.Process.killProcess(android.os.Process.myPid()); // 앱 프로세스 종료
+        moveTaskToBack(true);
+        finishAndRemoveTask();
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+
+    public void publicIpUnavailableButton(View v){
+        boolean on = ((ToggleButton) v).isChecked();
+        commonData.set_public_ip_unavailable(on);
+
     }
 }
